@@ -42,10 +42,15 @@ def evaluateImg(image):
     weights = np.array([1,2,3,4,5,6,7,8,9,10])
     mean_score = (scores * weights).sum(axis=1)
 
-    return mean_score
+
+    top_3_hits = np.argsort(out[1], axis=1)[0][::-1][:3]
+    semantic_tags = [ semantics.ix[hit + 1].semantic[1:] for hit in top_3_hits]
+
+    return mean_score, semantic_tags
 
 
 model = create_googlenet('googlenet_aesthetics_weights_distribution_2016-12-06 23:04:37.h5')
+semantics = pd.read_table('tags.txt',delimiter="(\d+)", usecols=[1,2], index_col=0, header=None,names=['index','semantic'])
 
 app = Flask(__name__)
 
@@ -84,10 +89,11 @@ def webhook():
                         send_message(sender_id, "An image eh? I will be right on it, just give me a moment while i ...")
                         image_url = messaging_event["message"]["attachments"][0]["payload"]["url"]
                         image = url_to_image(image_url)
-                        score = evaluateImg(image)
+                        score, semantic_tags = evaluateImg(image)
                         send_message(sender_id, "What a nice image, i have decided to rate it a %.1f"%score )
+                        send_message(sender_id, "Possible semantic tags include: {}".format(", ".join(semantic_tags)) )
 
-                    send_message(sender_id, "got it, thanks!")
+                    send_message(sender_id, "Have a nice day!")
 
                 if messaging_event.get("delivery"):  # delivery confirmation
                     pass
