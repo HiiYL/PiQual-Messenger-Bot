@@ -49,7 +49,7 @@ def evaluateImg(image):
     return mean_score, semantic_tags
 
 
-model = create_googlenet('googlenet_aesthetics_weights_distribution_2016-12-06 23:04:37.h5')
+model = create_googlenet('googlenet_aesthetics_weights_distribution_2016-12-06 23-04-37.h5')
 semantics = pd.read_table('tags.txt',delimiter="(\d+)", usecols=[1,2], index_col=0, header=None,names=['index','semantic'])
 
 app = Flask(__name__)
@@ -66,7 +66,7 @@ def verify():
 
     return "Hello world", 200
 
-
+accepted_filetypes = ['.jpg','.png','.JPG','.JPEG', '.PNG','.bmp','.BMP']
 @app.route('/', methods=['POST'])
 def webhook():
 
@@ -87,11 +87,80 @@ def webhook():
                     # message_text = messaging_event["message"]["text"]  # the message's text
                     if "attachments" in messaging_event["message"]:
                         send_message(sender_id, "An image eh? I will be right on it, just give me a moment while i ...")
+
                         image_url = messaging_event["message"]["attachments"][0]["payload"]["url"]
-                        image = url_to_image(image_url)
-                        score, semantic_tags = evaluateImg(image)
-                        send_message(sender_id, "What a nice image, i have decided to rate it a %.1f"%score )
-                        send_message(sender_id, "Possible semantic tags include: {}".format(", ".join(semantic_tags)) )
+                        if any(ext in image_url for ext in accepted_filetypes):
+                            image = url_to_image(image_url)
+                            score, semantic_tags = evaluateImg(image)
+                            score = score + (score-5) * (2.5)
+
+                            score = min(10, score)
+                            score = max(0, score)
+
+
+                            if score >= 10:
+                                send_message(sender_id, "A perfect shot! Couldnt have done better myself, a perfect 10 out of 10!"%score )
+                            if score >= 9:
+                                send_message(sender_id, "Truly a remarkable capture, %.1f out of ten !"%score )
+                            elif score >= 8:
+                                send_message(sender_id, "What an amazing image, i have decided to rate it a %.1f"%score )
+                            elif score >= 6:
+                                send_message(sender_id, "A pretty good picture, i award it a %.1f"%score )
+                            elif score >= 5:
+                                send_message(sender_id, "A decent shot, i rate it %.1f out of 10"%score )
+                            elif score >= 4:
+                                send_message(sender_id, "A reasonable attempt, i give it a %.1f out of 10"%score )
+                            elif score >= 3:
+                                send_message(sender_id, "I must say, this is a pretty poor image, looks about a %.1f"%score )
+                            elif score >= 2:
+                                send_message(sender_id, "A poor effort, surely you can do better? %.1f"%score )
+                            elif score >= 1:
+                                send_message(sender_id, "This is frankly an embarrassing effort, %.1f !" %score)
+                            else:
+                                send_message(sender_id, "Truly awful, %.1f")
+
+                            send_message(sender_id, "Possible semantic tags include: {}".format(", ".join(semantic_tags)) )
+                        else:
+                            send_message(sender_id, "That is not one of my accepted filetypes, sorry...")
+
+
+                        ### Style detection
+                        import requests
+                        import json
+                        headers = {"Content-Type": "application/json"}
+                        data = {"urls":[image_url]}
+                        url = "http://0.0.0.0:5005/classify"
+                        r = requests.post(url, headers=headers, data=json.dumps(data))
+
+                        if not (r.status_code == 404 or r.status_code == 500):
+                            tags = ['Detailed',
+                            'Pastel',
+                            'Melancholy',
+                            'Noir',
+                            'HDR',
+                            'Vintage',
+                            'Long Exposure',
+                            'Horror',
+                            'Sunny',
+                            'Bright',
+                            'Hazy',
+                            'Bokeh',
+                            'Serene',
+                            'Texture',
+                            'Ethereal',
+                            'Macro',
+                            'Depth of Field',
+                            'Geometric Composition',
+                            'Minimal',
+                            'Romantic']
+
+
+                            prediction = json.loads(r.text)['predictions'][0]
+                            predicted_tag = tags[prediction]
+
+                            send_message(sender_id, "Detected style: {}".format(predicted_tag))
+
+                    ## End of Style Detection
 
                     send_message(sender_id, "Have a nice day!")
 
